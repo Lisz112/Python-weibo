@@ -16,16 +16,6 @@ import pdb, traceback, sys
 import re
 import xlwt
 
-def debug(func):
-    def wrap(*arg, **kwarg):
-        try:
-            return func(*arg, **kwarg)
-        except:
-            type, value, tb = sys.exc_info()
-            traceback.print_exc()
-            pdb.post_mortem(tb)
-    return wrap
-
 class UserInfo():
     def __init__(self, userId, userName, area, gender):
         self.userId = userId
