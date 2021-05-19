@@ -1,20 +1,18 @@
-from urllib.request import urlopen, HTTPCookieProcessor, build_opener, Request
-from bs4 import BeautifulSoup
-import json
-import requests, pickle
-import time
-from urllib.parse import quote_plus
 import base64
-import hashlib
-import rsa
 import binascii
-import urllib.parse
-import os
 import http.cookiejar
-import time
-import pdb, traceback, sys
+import json
+import os
 import re
+import time
+import urllib.parse
+from urllib.parse import quote_plus
+
+import requests
+import rsa
 import xlwt
+from bs4 import BeautifulSoup
+
 
 class UserInfo():
     def __init__(self, userId, userName, area, gender):
@@ -22,6 +20,7 @@ class UserInfo():
         self.userName = userName
         self.area = area
         self.gender = gender
+
 
 class Comment():
     def __init__(self, comment, createdTime):
@@ -47,6 +46,7 @@ class Comment():
     def get_userId(self):
         return self.userInfo.userId
 
+
 class Weibo():
     def __init__(self, username, password):
         self.username = username
@@ -62,7 +62,7 @@ class Weibo():
 
     # 预登陆获得 servertime, nonce, pubkey, rsakv
     def get_server_data(self, su):
-        referer = 'https://login.sina.com.cn/signup/signin.php?entry=sso' # 注意必须加在请求头上，不然报错
+        referer = 'https://login.sina.com.cn/signup/signin.php?entry=sso'  # 注意必须加在请求头上，不然报错
         headers = {'User-Agent': self.agent, 'Referer': referer}
 
         pre_url = "https://login.sina.com.cn/sso/prelogin.php?entry=sso&callback=sinaSSOController.preloginCallBack&su="
@@ -87,9 +87,8 @@ class Weibo():
         protection_url = content['protection_url']
         protection_url_unquote = urllib.parse.unquote(protection_url)
         index_of_token = protection_url_unquote.find('token=')
-        token = protection_url_unquote[index_of_token+6:]
+        token = protection_url_unquote[index_of_token + 6:]
         return token
-
 
     # tpye: 1短信验证，2私信验证
     def login(self, type):
@@ -101,7 +100,7 @@ class Weibo():
         pubkey = sever_data['pubkey']
         sp = self.get_password(pubkey, servertime, nonce)
 
-        post_data={
+        post_data = {
             'entry': 'sso',
             'gateway': '1',
             'from': '',
@@ -136,11 +135,11 @@ class Weibo():
         # 获取token
         token = self.get_token(post_data_res)
 
-        retcode = -1 # 记录返回情况
+        retcode = -1  # 记录返回情况
         msg = ''
         redirect_url = ''
         # 短信验证码登录
-        if type==1:
+        if type == 1:
             # 发送get请求，并解析结果，获得加密后的电话号码
             protection_url = 'https://login.sina.com.cn/protection/index?callback_url=http://login.sina.com.cn/&token=' + token
             protection_url_res = self.session.get(protection_url).text
@@ -150,7 +149,8 @@ class Weibo():
             # 构造发送短信的请求
             send_message_url = 'https://login.sina.com.cn/protection/mobile/sendcode?token=' + token
 
-            referer = "https://login.sina.com.cn/protection/index?token={}&callback_url=http%3A%2F%2Flogin.sina.com.cn%2F".format(token)
+            referer = "https://login.sina.com.cn/protection/index?token={}&callback_url=http%3A%2F%2Flogin.sina.com.cn%2F".format(
+                token)
             headers = {
                 'Referer': referer,
                 'Content-Type': "application/x-www-form-urlencoded; charset=UTF-8"
@@ -159,14 +159,14 @@ class Weibo():
             body = {'encrypt_mobile': encrypt_mobile}
             data = urllib.parse.urlencode(body)
             # 发送验证码到手机
-            res = self.session.post(send_message_url, headers = headers, data = data)
+            res = self.session.post(send_message_url, headers=headers, data=data)
 
             message_code = input('输入短信验证码')
 
             login_url = 'https://login.sina.com.cn/protection/mobile/confirm?token=' + token
-            login_post_data = { 'encrypt_mobile': encrypt_mobile, 'code': message_code}
+            login_post_data = {'encrypt_mobile': encrypt_mobile, 'code': message_code}
 
-            login_post_res = self.session.post(login_url, headers = headers, data = login_post_data)
+            login_post_res = self.session.post(login_url, headers=headers, data=login_post_data)
             login_post_res_json = json.loads(login_post_res.text)
             retcode = login_post_res_json.get('retcode')
             msg = login_post_res_json.get('msg')
@@ -175,7 +175,8 @@ class Weibo():
             privatemsg_url = 'https://login.sina.com.cn/protection/privatemsg/send'
 
             body = {'token': token}
-            referer = 'https://login.sina.com.cn/protection/index?token={}&callback_url=http%3A%2F%2Flogin.sina.com.cn%2F'.format(token)
+            referer = 'https://login.sina.com.cn/protection/index?token={}&callback_url=http%3A%2F%2Flogin.sina.com.cn%2F'.format(
+                token)
             headers = {
                 'Referer': referer,
                 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -190,19 +191,19 @@ class Weibo():
             msg = res_json.get('msg')
         if retcode == 20000000:
             # 如果是发送私信验证，需要主动调用接口获得redirect_url
-            if (type==2):
+            if (type == 2):
                 stop = False
                 getStatus_url = 'https://login.sina.com.cn/protection/privatemsg/getstatus'
                 body = {'token': token}
                 data = urllib.parse.urlencode(body)
-                count = 0 # 尝试10次
+                count = 0  # 尝试10次
                 while (not stop):
-                    time.sleep(2) # 每2秒请求一次
+                    time.sleep(2)  # 每2秒请求一次
                     html = requests.post(getStatus_url, data=data, headers=headers)
                     ret_json = json.loads(html.text)
                     redirect_url = ret_json.get('data').get('redirect_url')
                     count += 1
-                    if (redirect_url != '' or count>10):
+                    if (redirect_url != '' or count > 10):
                         stop = True
                 if (redirect_url == ''):
                     print('未能在时间内正确发送私信验证！登陆失败！')
@@ -236,11 +237,12 @@ class Weibo():
         # 构造请求url
         requestsUrl = \
             'https://weibo.com/aj/v6/comment/big?ajwvr={}&id={}&from={}&__rnd={}'.format(ajwvr, id, _from, _rnd)
-        if (root_comment_max_id!=''):
-            requestsUrl += '&root_comment_max_id={}&root_comment_max_id_type={}&root_comment_ext_param={}&page={}&filter={}&sum_comment_number={}&filter_tips_before={}'.\
-                format(root_comment_max_id, root_comment_max_id_type, root_comment_ext_param, page, filter, sum_comment_number, filter_tips_before)
+        if (root_comment_max_id != ''):
+            requestsUrl += '&root_comment_max_id={}&root_comment_max_id_type={}&root_comment_ext_param={}&page={}&filter={}&sum_comment_number={}&filter_tips_before={}'. \
+                format(root_comment_max_id, root_comment_max_id_type, root_comment_ext_param, page, filter,
+                       sum_comment_number, filter_tips_before)
 
-        if (root_comment_max_id==0):
+        if (root_comment_max_id == 0):
             print('已到尾页！')
             return None
 
@@ -265,13 +267,13 @@ class Weibo():
                 return None
 
         # 若数据异常，尝试再次登录
-        if (int(resJson['code'])!=100000):
+        if (int(resJson['code']) != 100000):
             print('不能正常返回。msg: {}。尝试登录'.format(resJson['msg']))
             weibo.login(params[11])
             html = weibo.getPage(requestsUrl)
             resJson = json.loads(html.text)
             # 仍然无法正常获取数据，打印并返回
-            if (int(resJson['code'])!=100000):
+            if (int(resJson['code']) != 100000):
                 print('不能正常返回，msg:' + resJson['msg'])
                 return None
 
@@ -281,7 +283,7 @@ class Weibo():
         comments = self.parseCommentData(bs)
 
         # 判断是否还有数据可以加载
-        comment_loading = bs.find('div', attrs={'node-type':'comment_loading'})
+        comment_loading = bs.find('div', attrs={'node-type': 'comment_loading'})
         action_data = None
         if (comment_loading is not None):
             print('comment_loading...')
@@ -291,8 +293,8 @@ class Weibo():
             # 尝试查找a标签的action-data
             print('未能找到comment_loading，尝试直接寻找a标签的action-data')
             aList = bs.find_all('a', attrs={'action-data': True})
-            if (len(aList)>0):
-                action_data = proceed_action_data(aList[len(aList)-1]['action-data'])
+            if (len(aList) > 0):
+                action_data = proceed_action_data(aList[len(aList) - 1]['action-data'])
             else:
                 print('未能找到a标签的action-data')
 
@@ -314,8 +316,8 @@ class Weibo():
 
     # 解析评论数据
     # commentData为列表形式，每次请求获得20条评论
-    def  parseCommentData(self, bs):
-        commentsResult = []# 用于记录最后结果
+    def parseCommentData(self, bs):
+        commentsResult = []  # 用于记录最后结果
 
         # 解析并找到所有一级评论
         comments = bs.find_all('div', attrs={'node-type': re.compile('root_comment')})
@@ -328,7 +330,7 @@ class Weibo():
             commentText = ''
             commentCreatedTime = ''
             if (a is not None):
-                userId = a['usercard'][3:] # 找到userId
+                userId = a['usercard'][3:]  # 找到userId
                 userInfo = self.getUserInfoFromUserObj(userId, a.text)
                 commentText = WB_text.text
                 timeTag = comment.find('div', class_='WB_from')
@@ -339,7 +341,7 @@ class Weibo():
                 commentObj = Comment(commentText, commentCreatedTime)
                 commentObj.set_userInfo(userInfo)
                 commentsResult.append(commentObj)
-            else :
+            else:
                 print('未能找到用户id，跳过')
                 continue
 
@@ -362,7 +364,7 @@ class Weibo():
                     userInfo_html_str = userInfo_json['html']
                     bs = BeautifulSoup(userInfo_html_str, 'html.parser')
                     item_texts = bs.find_all('span', class_='item_text')
-                    if len(item_texts)>1:
+                    if len(item_texts) > 1:
                         userArea = str.strip(item_texts[1].text)
                 except KeyError as e:
                     print(e)
@@ -381,21 +383,22 @@ class Weibo():
         url = 'https://m.weibo.cn/api/container/getIndex?uid={}&type=uid&value={}'.format(userId, userId)
         html = self.session.get(url)
         resJson = json.loads(html.text)
-        if resJson['ok']!=1:
+        if resJson['ok'] != 1:
             print('获取数据失败！')
             return -1
         tabsInfo = resJson['data']['tabsInfo']
         mainPageContainerId = tabsInfo['tabs'][0]['containerid']
-        url = 'https://m.weibo.cn/api/container/getIndex?uid={}&type=uid&value={}&containerid={}'.format(userId, userId, mainPageContainerId)
+        url = 'https://m.weibo.cn/api/container/getIndex?uid={}&type=uid&value={}&containerid={}'.format(userId, userId,
+                                                                                                         mainPageContainerId)
         htmlMainPage = self.session.get(url)
         resJson = json.loads(htmlMainPage.text)
-        if resJson['ok']!=1:
+        if resJson['ok'] != 1:
             print('获取数据失败！')
             return -1
 
         cardGroup = resJson['data']['cards'][0]['card_group']
         for card in cardGroup:
-            if card['item_name']=='所在地':
+            if card['item_name'] == '所在地':
                 return card['item_content']
 
         print('未找到用户{}的所在地信息！'.format(userId))
@@ -410,11 +413,13 @@ class Weibo():
     def getPage(self, url):
         # 爬取数据之前先尝试使用cookie
         SUB = load_cookies_from_lwp(self.cookie_file)
-        headers = {'Host': 'weibo.com', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36'}
+        headers = {'Host': 'weibo.com',
+                   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36'}
         self.session.cookies['SUB'] = SUB
 
         html = self.session.get(url, headers=headers)
         return html
+
 
 def proceed_action_data(action_data_str):
     res = {}
@@ -424,13 +429,15 @@ def proceed_action_data(action_data_str):
         res[list[0]] = list[1]
     return res
 
+
 def has_usercard(tag):
     return tag.has_attr('usercard')
+
 
 def save_cookies_lwp(cookiejar, filename):
     lwp_cookiejar = http.cookiejar.LWPCookieJar()
     if not os.path.exists(filename):
-        file = open(filename,'w')
+        file = open(filename, 'w')
         # file.write('#LWP-Cookies-2.0')
         file.close()
 
@@ -441,7 +448,7 @@ def save_cookies_lwp(cookiejar, filename):
         del args['_rest']
         c = http.cookiejar.Cookie(**args)
 
-        if c.name=='SUB':
+        if c.name == 'SUB':
             SUB = c.value
             file = open(filename, 'w')
             file.truncate()
@@ -449,12 +456,13 @@ def save_cookies_lwp(cookiejar, filename):
             file.close()
             print('cookie已经保存在本地！值为：' + SUB)
 
+
 def load_cookies_from_lwp(filename):
     if os.path.exists(filename):
         try:
             with open(filename, 'r') as f:
                 SUB = f.read()
-                if (len(SUB)>0):
+                if (len(SUB) > 0):
                     return SUB
                 else:
                     print('cookie文件为空！')
@@ -466,26 +474,29 @@ def load_cookies_from_lwp(filename):
         print('cookie file not found')
         return None
 
+
 # 获取当前时间（毫秒）的Unix时间戳
 def getTimeStamp():
     return str(int(time.time() * 1000))
 
+
 # 将评论内容保存至文件
 def save_comments_to_file(comments):
     book = xlwt.Workbook()
-    sheet = book.add_sheet(u'sheet1',cell_overwrite_ok=True)
-    i=0
+    sheet = book.add_sheet(u'sheet1', cell_overwrite_ok=True)
+    i = 0
     for comment in comments:
-        sheet.write(i,0, comment.get_userName())
-        sheet.write(i,1, comment.get_comment())
-        sheet.write(i,2, comment.get_userArea())
-        sheet.write(i,3, comment.get_createdTime())
-        sheet.write(i,4, comment.get_userId())
-        i+=1
+        sheet.write(i, 0, comment.get_userName())
+        sheet.write(i, 1, comment.get_comment())
+        sheet.write(i, 2, comment.get_userArea())
+        sheet.write(i, 3, comment.get_createdTime())
+        sheet.write(i, 4, comment.get_userId())
+        i += 1
     book.save('comments.xls')
 
+
 startTime = time.localtime(time.time())
-print('start at '+ time.strftime("%Y-%m-%d %H:%M:%S",startTime))
+print('start at ' + time.strftime("%Y-%m-%d %H:%M:%S", startTime))
 
 weibo = Weibo('username', 'password')
 
@@ -494,42 +505,40 @@ url = 'https://weibo.com/aj/v6/comment/big?ajwvr=6&id=4629927523521329&from=sing
 
 param_ajwvr = '6'
 param_from = 'singleWeiBo'
-param_id = '4629927523521329' # 上面url中的id
+param_id = '4629927523521329'  # 上面url中的id
 param__rnd = ''
 
 params = [
-    param_ajwvr, # ajwvr
+    param_ajwvr,  # ajwvr
     param_from,  # from
-    param_id,    # id
+    param_id,  # id
     param__rnd,  # 毫秒级时间戳
-    '', # root_comment_max_id
-    '', # root_comment_max_id_type
-    '', # root_comment_ext_param
-    '', # page
-    '', # filter
-    '', # sum_comment_number
-    '', # filter_tips_before
-    1 # 验证方式 1为短信验证 2为私信验证
-] # 分别对应ajwvr, from, id, _rnd， 验证方式 5个参数
+    '',  # root_comment_max_id
+    '',  # root_comment_max_id_type
+    '',  # root_comment_ext_param
+    '',  # page
+    '',  # filter
+    '',  # sum_comment_number
+    '',  # filter_tips_before
+    1  # 验证方式 1为短信验证 2为私信验证
+]  # 分别对应ajwvr, from, id, _rnd， 验证方式 5个参数
 
 comments = []
 maxComments = 10000
-page = 0 # 尝试获取前n页数据
+page = 0  # 尝试获取前n页数据
 
-while (len(comments)<maxComments):
+while (len(comments) < maxComments):
     currentComments = weibo.getComment(params)
     if currentComments is not None:
         comments.extend(currentComments)
-    if params[4]==0:
+    if params[4] == 0:
         break
 
     time.sleep(2)
     print('已经爬取{}条数据'.format(len(comments)))
 
-print('start saving comments at'+ time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(time.time())))
+print('start saving comments at' + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time())))
 save_comments_to_file(comments)
 
-print('end at '+ time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(time.time())))
+print('end at ' + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time())))
 print('over')
-
-
